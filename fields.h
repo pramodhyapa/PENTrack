@@ -144,6 +144,7 @@ struct TFieldManager{
 					fields.push_back(tf);
 				}
 				else if (type == "3Dtable"){
+					printf("3D TABLE WHAT WHAT!");
 					infile >> ft >> Bscale >> Escale >> NullFieldTime >> RampUpTime >> FullFieldTime >> RampDownTime;
 					TabField3 *tf;
 					tf = new TabField3(ft.c_str(), Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime);
