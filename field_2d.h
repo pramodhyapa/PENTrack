@@ -489,6 +489,7 @@ class TabField: public TField{
 				B[2][1] += dBzdr*cos(phi)*Bscale;
 				B[2][2] += dBzdr*sin(phi)*Bscale;
 				B[2][3] += dBzdz*Bscale;
+				printf("What is THIS SHIT???");
 			}
 		};
 

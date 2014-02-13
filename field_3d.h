@@ -598,10 +598,41 @@ class TabField3: public TField{
 		 */
 		void BField(long double x, long double y, long double z, long double t, long double B[4][4]){
 			long double Bscale = BFieldScale(t);
+
+			//printf("This is x: %llf\n",x);
+			
 			// get coordinate index
 			int indx = (int)((x - x_mi)/xdist);
 			int indy = (int)((y - y_mi)/ydist);
 			int indz = (int)((z - z_mi)/zdist);
+
+			//alternate variables for x,y,z for use in folding functions
+			long double xf = x; 
+			long double yf = y; 
+			long double zf = z; 
+
+			//the dimensions of the field
+			long double x1 = -0.12; 
+			long double x2 = 0.11; 
+			long double y1 = 2.000342; 
+			long double y2 = 6.000342;
+			long double z1 = -0.11; 
+			long double z2 = 0.11; 
+
+			//the boundary values for the 'positive' boundary
+			long double g = 0.06; //the start boundary value for x, z
+			long double h = 0.11; //the end boundary value for x, z
+			long double p = 5.950342; //the start boundary value for y
+			long double q = 6.000342; //the start boundary value for y
+
+			//the boundary values for the 'negative' boundary
+			long double g2 = -0.12; //the start boundary value for x, z
+			long double h2 = -0.06; //the end boundary value for x, z
+			long double p2 = 2.000342; //the start boundary value for y
+			long double q2 = 1.950342; //the start boundary value for y
+
+
+
 			if (Bscale != 0 && indx >= 0 && indx < xl - 1 && indy >= 0 && indy < yl - 1 && indz >= 0 && indz < zl - 1){
 				// scale coordinates to unit cube
 				x = (x - x_mi - indx*xdist)/xdist;
@@ -627,6 +658,46 @@ class TabField3: public TField{
 					B[2][3] += Bscale*tricubic_eval((*Bzc)[indx][indy][indz], x, y, z, 0, 0, 1)/zdist;
 				}
 			}
+
+									
+			//folding in the 'positive' boundary of each axis
+			if ((xf >=g) && (xf<=h) && (yf>=y1) && (yf<=y2) && (zf>=z1) && (zf<=z2)) {
+				B[0][0]=B[0][0]*(1-(6*pow((xf-g)/(h-g),5)-15*pow((xf-g)/(h-g),4)+10*pow((xf-g)/(h-g),3)));
+				B[1][0]=B[1][0]*(1-(6*pow((xf-g)/(h-g),5)-15*pow((xf-g)/(h-g),4)+10*pow((xf-g)/(h-g),3)));
+				B[2][0]=B[2][0]*(1-(6*pow((xf-g)/(h-g),5)-15*pow((xf-g)/(h-g),4)+10*pow((xf-g)/(h-g),3)));
+			} 
+			if (yf >p && yf<q && xf>x1 && xf<x2 && zf>z1 && zf<z2){
+				B[0][0]=B[0][0]*(1-(6*pow((yf-p)/(q-p),5)-15*pow((yf-p)/(q-p),4)+10*pow((yf-p)/(q-p),3)));
+				B[1][0]=B[1][0]*(1-(6*pow((yf-p)/(q-p),5)-15*pow((yf-p)/(q-p),4)+10*pow((yf-p)/(q-p),3)));
+				B[2][0]=B[2][0]*(1-(6*pow((yf-p)/(q-p),5)-15*pow((yf-p)/(q-p),4)+10*pow((yf-p)/(q-p),3)));
+			}
+			
+			if (zf >=g && zf<=h && yf>=y1 && yf<=y2 && xf>=x1 && xf<=x2){
+				B[0][0]=B[0][0]*(1-(6*pow((zf-g)/(h-g),5)-15*pow((zf-g)/(h-g),4)+10*pow((zf-g)/(h-g),3)));
+				B[1][0]=B[1][0]*(1-(6*pow((zf-g)/(h-g),5)-15*pow((zf-g)/(h-g),4)+10*pow((zf-g)/(h-g),3)));
+				B[2][0]=B[2][0]*(1-(6*pow((zf-g)/(h-g),5)-15*pow((zf-g)/(h-g),4)+10*pow((zf-g)/(h-g),3)));
+			} 
+			
+			
+			//REVAMPED folding in the 'negative' boundary of each axis
+			if (xf >=g2 && xf<=h2 && yf>=y1 && yf<=y2 && zf>=z1 && zf<=z2){
+				B[0][0]=B[0][0]*(6*pow((xf-g2)/(h2-g2),5)-15*pow((xf-g2)/(h2-g2),4)+10*pow((xf-g2)/(h2-g2),3));
+				B[1][0]=B[1][0]*(6*pow((xf-g2)/(h2-g2),5)-15*pow((xf-g2)/(h2-g2),4)+10*pow((xf-g2)/(h2-g2),3));
+				B[2][0]=B[2][0]*(6*pow((xf-g2)/(h2-g2),5)-15*pow((xf-g2)/(h2-g2),4)+10*pow((xf-g2)/(h2-g2),3));
+			}
+			if (yf >=p2 && yf<=q2 && xf>=x1 && xf<=x2 && zf>=z1 && zf<=z2){
+				B[0][0]=B[0][0]*(6*pow((yf-p2)/(q2-p2),5)-15*pow((yf-p2)/(q2-p2),4)+10*pow((yf-p2)/(q2-p2),3));
+				B[1][0]=B[1][0]*(6*pow((yf-p2)/(q2-p2),5)-15*pow((yf-p2)/(q2-p2),4)+10*pow((yf-p2)/(q2-p2),3));
+				B[2][0]=B[2][0]*(6*pow((yf-p2)/(q2-p2),5)-15*pow((yf-p2)/(q2-p2),4)+10*pow((yf-p2)/(q2-p2),3));
+			}
+			
+			if (zf >=g2 && zf<=h2 && yf>=y1 && yf<=y2 && xf>=x1 && xf<=x2){
+				B[0][0]=B[0][0]*(6*pow((zf-g2)/(h2-g2),5)-15*pow((zf-g2)/(h2-g2),4)+10*pow((zf-g2)/(h2-g2),3));
+				B[1][0]=B[1][0]*(6*pow((zf-g2)/(h2-g2),5)-15*pow((zf-g2)/(h2-g2),4)+10*pow((zf-g2)/(h2-g2),3));
+				B[2][0]=B[2][0]*(6*pow((zf-g2)/(h2-g2),5)-15*pow((zf-g2)/(h2-g2),4)+10*pow((zf-g2)/(h2-g2),3));
+			}  
+
+			
 		};
 
 		/**
