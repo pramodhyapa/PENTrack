@@ -40,7 +40,7 @@
 #include "bruteforce.h"
 #include "ndist.h"
 
-void ConfigInit(); // read config.in
+void ConfigInit(TConfig &config); // read config.in
 void OutputCodes(map<string, map<int, int> > &ID_counter); // print simulation summary at program exit
 void PrintBFieldCut(const char *outfile, TFieldManager &field); // evaluate fields on given plane and write to outfile
 void PrintBField(const char *outfile, TFieldManager &field);
@@ -95,14 +95,12 @@ int main(int argc, char **argv){
 	if(argc>3) // if user supplied all 3 args (outputfilestamp, inpath, outpath)
 		outpath = argv[3]; // set the output path pointer
 	
-	// read config.in
-	ConfigInit();
 	TConfig configin;
 	ReadInFile(string(inpath + "/config.in").c_str(), configin);
 	TConfig geometryin;
 	ReadInFile(string(inpath + "/geometry.in").c_str(), geometryin);
 	TConfig particlein;
-	ReadInFile(string(inpath+"/particle.in").c_str(), particlein); // read particle specific log configuration from particle.in
+	ReadInFile(string(inpath + "/particle.in").c_str(), particlein); // read particle specific log configuration from particle.in
 	for (TConfig::iterator i = particlein.begin(); i != particlein.end(); i++){
 		if (i->first != "all"){
 			i->second = particlein["all"]; // set all particle specific settings to the "all" settings
@@ -110,6 +108,8 @@ int main(int argc, char **argv){
 	}
 	ReadInFile(string(inpath+"/particle.in").c_str(), particlein); // read again to overwrite "all" settings with particle specific settings
 
+	// read config.in
+	ConfigInit(configin);
 
 	if(simtype == NEUTRON){
 		if (neutdist == 1) prepndist(); // prepare for neutron distribution-calculation
@@ -117,7 +117,7 @@ int main(int argc, char **argv){
 	
 	cout << "Loading fields...\n";
 	// load field configuration from geometry.in
-	TFieldManager field(string(inpath + "/geometry.in").c_str());
+	TFieldManager field(geometryin);
 
 	switch(simtype)
 	{
@@ -140,7 +140,7 @@ int main(int argc, char **argv){
 	
 	cout << "Loading source...\n";
 	// load source configuration from geometry.in
-	TSource source(string(inpath + "/geometry.in").c_str(), geom, field);
+	TSource source(geometryin, geom, field);
 	
 	cout << "Loading random number generator...\n";
 	// load random number generator from all3inone.in
@@ -241,18 +241,16 @@ int main(int argc, char **argv){
 
 /**
  * Read config file.
+ *
+ * @param config TConfig struct containing [global] options map
  */
-void ConfigInit(void){
+void ConfigInit(TConfig &config){
 	/* setting default values */
 	simtype = NEUTRON;
 	neutdist = 0;
 	simcount = 1;
 	/*end default values*/
-	
-	/* read lines in config.in into map */
-	TConfig config;
-	ReadInFile(string(inpath+"/config.in").c_str(), config);
-	
+
 	/* read variables from map by casting strings in map into istringstreams and extracting value with ">>"-operator */
 	istringstream(config["global"]["simtype"])		>> simtype;
 	istringstream(config["global"]["neutdist"])		>> neutdist;
@@ -423,14 +421,8 @@ void PrintGeometry(const char *outfile, TGeometry &geom){
 	clock_gettime(CLOCK_REALTIME, &collstart);
 	for (unsigned i = 0; i < count; i++){
     	// random segment start point
-#ifndef USE_CGAL
-        p1[0] = (((long double)rand())/RAND_MAX) * (geom.kdtree->hi[0] - geom.kdtree->lo[0]) + geom.kdtree->lo[0];
-        p1[1] = (((long double)rand())/RAND_MAX) * (geom.kdtree->hi[1] - geom.kdtree->lo[1]) + geom.kdtree->lo[1];
-        p1[2] = (((long double)rand())/RAND_MAX) * (geom.kdtree->hi[2] - geom.kdtree->lo[2]) + geom.kdtree->lo[2];
-#else
         for (int j = 0; j < 3; j++)
-        	p1[j] = (long double)rand()/RAND_MAX * (geom.kdtree->tree.bbox().max(j) - geom.kdtree->tree.bbox().min(j)) + geom.kdtree->tree.bbox().min(j);
-#endif
+        	p1[j] = (long double)rand()/RAND_MAX * (geom.mesh.tree.bbox().max(j) - geom.mesh.tree.bbox().min(j)) + geom.mesh.tree.bbox().min(j);
 		// random segment direction
         theta = (long double)rand()/RAND_MAX*pi;
 		phi = (long double)rand()/RAND_MAX*2*pi;
@@ -439,7 +431,7 @@ void PrintGeometry(const char *outfile, TGeometry &geom){
 		p2[1] = p1[1] + raylength*sin(theta)*sin(phi);
 		p2[2] = p1[2] + raylength*cos(theta);
 
-		if (geom.kdtree->Collision(p1,p2,c)){ // check if segment intersected with surfaces
+		if (geom.mesh.Collision(p1,p2,c)){ // check if segment intersected with surfaces
 			collcount++;
 			for (set<TCollision>::iterator i = c.begin(); i != c.end(); i++){ // print all intersection points into file
 				f << p1[0] + i->s*(p2[0]-p1[0]) << " " << p1[1] + i->s*(p2[1] - p1[1]) << " " << p1[2] + i->s*(p2[2] - p1[2]) << '\n';

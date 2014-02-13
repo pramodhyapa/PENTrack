@@ -316,6 +316,7 @@ struct TParticle{
 					x1 = x2;
 					for (int i = 0; i < 6; i++)
 						y1[i] = y2[i];
+					polend = polarisation;
 				}		
 				
 				PrintPercent(max((x - tstart)/tau, max((x - tstart)/(tmax - tstart), lend/maxtraj)), perc);
@@ -348,7 +349,8 @@ struct TParticle{
 			cout << " Code: " << ID;
 			cout << " t: " << tend;
 			cout << " l: " << lend;
-			cout << " hits: " << Nhit << '\n';
+			cout << " hits: " << Nhit;
+			cout << " spinflips: " << Nspinflip << '\n';
 			cout << "Computation took " << Nstep << " steps, " << inttime << " s for integration and " << refltime << " s for geometry checks\n";
 			cout << "Done!!\n\n";
 //			cout.flush();
@@ -369,7 +371,7 @@ struct TParticle{
 			if (!file){
 				ostringstream filename;
 				filename << outpath << '/' << setw(12) << setfill('0') << jobnumber << name << "end.out";
-				cout << "Creating " << filename << '\n';
+				cout << "Creating " << filename.str() << '\n';
 				file = new ofstream(filename.str().c_str());
 				*file <<	"jobnumber particle "
 	                		"tstart xstart ystart zstart "
@@ -409,7 +411,7 @@ struct TParticle{
 			if (!trackfile){
 				ostringstream filename;
 				filename << outpath << '/' << setw(12) << setfill('0') << jobnumber << name << "track.out";
-				cout << "Creating " << filename << '\n';
+				cout << "Creating " << filename.str() << '\n';
 				trackfile = new ofstream(filename.str().c_str());
 				*trackfile << 	"particle polarisation "
 								"t x y z vx vy vz "
@@ -690,14 +692,15 @@ struct TParticle{
 						entering = hitsolid;
 						if (entering->ID > leaving->ID){ // check for reflection only, if priority of entered solid is larger than that of current solid
 							hit = true;
-							resetintegration = OnHit(x1, y1, x2, y2, coll.normal, leaving, entering); // do particle specific things
+							resetintegration = OnHit(x1, y1, x2, y2, pol, coll.normal, leaving, entering); // do particle specific things
 							if (entering != leaving)
 								currentsolids.insert(*entering);
 							entering = hitsolid;
 						}
 					}
 					else if (distnormal > 0){ // particle is leaving solid
-						if (currentsolids.find(*hitsolid) == currentsolids.end()){ // if solid is not in currentsolids list something went wrong
+						if (hitsolid->ignoretimes.empty() // ignore this error for temporary solids
+									&& currentsolids.find(*hitsolid) == currentsolids.end()){ // if solid is not in currentsolids list something went wrong
 							cout << "Particle inside '" << hitsolid->name << "' which it did not enter before! Stopping it!\n";
 							x2 = x1;
 							for (int i = 0; i < 6; i++)
@@ -709,7 +712,7 @@ struct TParticle{
 						if (leaving->ID == currentsolids.rbegin()->ID){ // check for reflection only, if left solids is the solid with highest priority
 							hit = true;
 							entering = &*++currentsolids.rbegin();
-							resetintegration = OnHit(x1, y1, x2, y2, coll.normal, leaving, entering); // do particle specific things
+							resetintegration = OnHit(x1, y1, x2, y2, pol, coll.normal, leaving, entering); // do particle specific things
 							if (entering != leaving)
 								currentsolids.erase(*leaving);
 							else
@@ -725,8 +728,9 @@ struct TParticle{
 						return true;
 					}
 
-					if (hit && hitlog){
-						PrintHit(hitout, x1, y1, y2, prevpol, pol, coll.normal, leaving, entering);
+					if (hit){
+						if (hitlog)
+							PrintHit(hitout, x1, y1, y2, prevpol, pol, coll.normal, leaving, entering);
 						Nhit++;
 					}
 
@@ -795,12 +799,14 @@ struct TParticle{
 		 * @param y1 Start point of line segment
 		 * @param x2 End time of line segment, may be altered
 		 * @param y2 End point of line segment, may be altered
+		 * @param polarisation Polarisation of particle, may be altered
 		 * @param normal Normal vector of hit surface
 		 * @param leaving Solid that the particle is leaving
 		 * @param entering Solid that the particle is entering (can be modified by method)
 		 * @return Returns true if particle path was changed
 		 */
-		virtual bool OnHit(long double x1, long double y1[6], long double &x2, long double y2[6], long double normal[3], const solid *leaving, const solid *&entering) = 0;
+		virtual bool OnHit(long double x1, long double y1[6], long double &x2, long double y2[6], int &polarisation,
+							long double normal[3], const solid *leaving, const solid *&entering) = 0;
 
 
 		/**
