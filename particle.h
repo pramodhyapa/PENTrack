@@ -12,7 +12,9 @@
 #include <algorithm>
 #include <sys/time.h>
 
-#define MAX_SAMPLE_DIST 0.01 ///< max spatial distance of reflection checks, spin flip calculation, etc; longer integration steps will be interpolated
+static const double MAX_SAMPLE_DIST = 0.01; ///< max spatial distance of reflection checks, spin flip calculation, etc; longer integration steps will be interpolated
+static const double RELATIVISTIC_THRESHOLD = 0.01; ///< threshold (v/c) above which kinetic energy is calculated relativisticly
+static const bool IGNORE_MISSEDHITS_IN_TEMPSOLIDS = false; ///< set this to true, if you want to ignore errors for particles that happen to be inside temporary solids when they appear. Might mask other faults in your geometry, so use with caution
 
 #include "globals.h"
 #include "fields.h"
@@ -29,6 +31,7 @@
  */
 struct TOutput{
 	ofstream *endout; ///< endlog file stream
+	ofstream *snapshotout; ///< snapshot file stream
 	ofstream *trackout; ///< tracklog file stream
 	ofstream *hitout; ///< hitlog file stream
 	ofstream *spinout; ///< spinlog file stream
@@ -36,7 +39,7 @@ struct TOutput{
 	/**
 	 * Constructor: initializes empty streams
 	 */
-	TOutput(): endout(NULL), trackout(NULL), hitout(NULL), spinout(NULL) { };
+	TOutput(): endout(NULL), snapshotout(NULL), trackout(NULL), hitout(NULL), spinout(NULL) { };
 
 	/**
 	 * Destructor, close open streams.
@@ -45,6 +48,10 @@ struct TOutput{
 		if (endout){
 			endout->close();
 			delete endout;
+		}
+		if (snapshotout){
+			snapshotout->close();
+			delete snapshotout;
 		}
 		if (trackout){
 			trackout->close();
@@ -102,10 +109,14 @@ struct TParticle{
 		int polend;
 
 		/// total start energy
-		long double Hstart(){ return Ekin(&ystart[3]) + Epot(tstart, ystart, polstart, field); };
+		long double Hstart(){
+			set<solid> solids;
+			geom->GetSolids(tstart, ystart, solids);
+			return Ekin(&ystart[3]) + Epot(tstart, ystart, polstart, field, solids);
+		};
 
 		/// total end energy
-		long double Hend(){ return Ekin(&yend[3]) + Epot(tend, yend, polend, field); };
+		long double Hend(){ return Ekin(&yend[3]) + Epot(tend, yend, polend, field, currentsolids); };
 
 		/// max total energy
 		long double Hmax;
@@ -288,7 +299,7 @@ struct TParticle{
 					refltime += refl_end.tv_sec - refl_start.tv_sec + (long double)(refl_end.tv_nsec - refl_start.tv_nsec)/1e9;
 				
 					lend += sqrt(pow(y2[0] - y1[0], 2) + pow(y2[1] - y1[1], 2) + pow(y2[2] - y1[2], 2));
-					Hmax = max(Ekin(&y2[3]) + Epot(x, y2, polarisation, field), Hmax);
+					Hmax = max(Ekin(&y2[3]) + Epot(x, y2, polarisation, field, currentsolids), Hmax);
 
 					// take snapshots at certain times
 					if (snapshotlog && snapshots.good()){
@@ -298,7 +309,7 @@ struct TParticle{
 								ysnap[i] = stepper->dense_out(i, nextsnapshot, stepper->hdid);
 							cout << "\n Snapshot at " << nextsnapshot << " s \n";
 
-							Print(output.endout, nextsnapshot, ysnap, polarisation);
+							Print(output.snapshotout, nextsnapshot, ysnap, polarisation, "snapshot.out");
 							snapshots >> nextsnapshot;
 						}
 					}
@@ -356,124 +367,6 @@ struct TParticle{
 //			cout.flush();
 		};
 	
-
-		/**
-		 * Print start and current values to a stream.
-		 *
-		 * This is a virtual function and can be overwritten by derived particle classes.
-		 *
-		 * @param file stream to print into
-		 * @param x Current time
-		 * @param y Current state vector
-		 * @param polarisation Current polarisation
-		 */
-		virtual void Print(ofstream *&file, long double x, long double y[6], int polarisation){
-			if (!file){
-				ostringstream filename;
-				filename << outpath << '/' << setw(12) << setfill('0') << jobnumber << name << "end.out";
-				cout << "Creating " << filename.str() << '\n';
-				file = new ofstream(filename.str().c_str());
-				*file <<	"jobnumber particle "
-	                		"tstart xstart ystart zstart "
-	                		"vxstart vystart vzstart "
-	                		"polstart Hstart Estart "
-	                		"tend xend yend zend "
-	                		"vxend vyend vzend "
-	                		"polend Hend Eend stopID Nspinflip spinflipprob "
-	                		"ComputingTime Nhit Nstep trajlength Hmax\n";
-				file->precision(10);
-			}
-			cout << "Printing status\n";
-			long double E = Ekin(&y[3]);
-			*file	<<	jobnumber << " " << particlenumber << " "
-					<<	tstart << " " << ystart[0] << " " << ystart[1] << " " << ystart[2] << " "
-					<<	ystart[3] << " " << ystart[4] << " " << ystart[5] << " "
-					<< polstart << " " << Hstart() << " " << Estart() << " "
-					<< x << " " << y[0] << " " << y[1] << " " << y[2] << " "
-					<< y[3] << " " << y[4] << " " << y[5] << " "
-					<< polarisation << " " << E + Epot(x, y, polarisation, field) << " " << E << " " << ID << " " << Nspinflip << " " << 1 - noflipprob << " "
-					<< inttime << " " << Nhit << " " << Nstep << " " << lend << " " << Hmax << '\n';
-		};
-
-
-
-		/**
-		 * Print current track point into stream to allow visualization of the particle's trajectory.
-		 *
-		 * This is a virtual function and can be overwritten by derived particle classes.
-		 *
-		 * @param trackfile Stream to print into
-		 * @param x Current time
-		 * @param y Current state vector
-		 * @param polarisation Current polarisation
-		 */
-		virtual void PrintTrack(ofstream *&trackfile, long double x, long double y[6], int polarisation){
-			if (!trackfile){
-				ostringstream filename;
-				filename << outpath << '/' << setw(12) << setfill('0') << jobnumber << name << "track.out";
-				cout << "Creating " << filename.str() << '\n';
-				trackfile = new ofstream(filename.str().c_str());
-				*trackfile << 	"particle polarisation "
-								"t x y z vx vy vz "
-								"H E Bx dBxdx dBxdy dBxdz By dBydx "
-								"dBydy dBydz Bz dBzdx dBzdy dBzdz Babs dBdx dBdy dBdz Ex Ey Ez V\n";
-				trackfile->precision(10);
-			}
-
-			cout << "-";
-			long double B[4][4] = {{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}};
-			long double E[3] = {0,0,0};
-			long double V = 0;
-			if (field){
-				field->BField(y[0],y[1],y[2],x,B);
-				field->EField(y[0],y[1],y[2],x,V,E);
-			}
-			long double Ek = Ekin(&y[3]);
-			long double H = Ek + Epot(x, y, polarisation, field);
-
-			*trackfile 	<< particlenumber << " " << polarisation << " "
-						<< x << " " << y[0] << " " << y[1] << " " << y[2] << " " << y[3] << " " << y[4] << " " << y[5] << " "
-						<< H << " " << Ek << " ";
-			for (int i = 0; i < 4; i++)
-				for (int j = 0; j < 4; j++)
-					*trackfile << B[i][j] << " ";
-			*trackfile << E[0] << " " << E[1] << " " << E[2] << " " << V << '\n';
-		};
-
-		/**
-		 * Print material boundary hits into stream.
-		 *
-		 * This is a virtual function and can be overwritten by derived particle classes.
-		 *
-		 * @param hitfile stream to print into
-		 * @param x Time of material hit
-		 * @param y1 State vector before material hit
-		 * @param y2 State vector after material hit
-		 * @param pol1 Polarisation before material hit
-		 * @param pol2 Polarisation after material hit
-		 * @param normal Normal vector of hit surface
-		 * @param leaving Material which is left at this boundary
-		 * @param entering Material which is entered at this boundary
-		 */
-		virtual void PrintHit(ofstream *&hitfile, long double x, long double *y1, long double *y2, int pol1, int pol2, long double *normal, const solid *leaving, const solid *entering){
-			if (!hitfile){
-				ostringstream filename;
-				filename << outpath << '/' << setw(12) << setfill('0') << jobnumber << name << "hit.out";
-				cout << "Creating " << filename.str() << '\n';
-				hitfile = new ofstream(filename.str().c_str());
-				*hitfile << "jobnumber particle "
-							"t x y z v1x v1y v1z pol1 "
-							"v2x v2y v2z pol2 "
-							"nx ny nz solid1 solid2\n";
-				hitfile->precision(10);
-			}
-
-			cout << ":";
-			*hitfile << jobnumber << " " << particlenumber << " "
-					<< x << " " << y1[0] << " " << y1[1] << " " << y1[2] << " " << y1[3] << " " << y1[4] << " " << y1[5] << " " << pol1 << " "
-					<< y2[3] << " " << y2[4] << " " << y2[5] << " " << pol2 << " "
-					<< normal[0] << " " << normal[1] << " " << normal[2] << " " << leaving->ID << " " << entering->ID << '\n';
-		}
 
 	protected:
 		std::set<solid> currentsolids; ///< solids in which particle is currently inside
@@ -699,8 +592,8 @@ struct TParticle{
 						}
 					}
 					else if (distnormal > 0){ // particle is leaving solid
-						if (hitsolid->ignoretimes.empty() // ignore this error for temporary solids
-									&& currentsolids.find(*hitsolid) == currentsolids.end()){ // if solid is not in currentsolids list something went wrong
+						if (currentsolids.find(*hitsolid) == currentsolids.end() // if solid is not in currentsolids list something went wrong
+							&& (hitsolid->ignoretimes.empty() || (!hitsolid->ignoretimes.empty() && !IGNORE_MISSEDHITS_IN_TEMPSOLIDS))){ // ignore this error for temporary solids
 							cout << "Particle inside '" << hitsolid->name << "' which it did not enter before! Stopping it!\n";
 							x2 = x1;
 							for (int i = 0; i < 6; i++)
@@ -831,19 +724,153 @@ struct TParticle{
 		virtual void Decay() = 0;
 
 
+
+		/**
+		 * Print start and current values to a stream.
+		 *
+		 * This is a virtual function and can be overwritten by derived particle classes.
+		 *
+		 * @param file stream to print into
+		 * @param x Current time
+		 * @param y Current state vector
+		 * @param polarisation Current polarisation
+		 * @param filesuffix Optional suffix added to the file name (default: "end.out")
+		 */
+		virtual void Print(ofstream *&file, long double x, long double y[6], int polarisation, string filesuffix = "end.out"){
+			if (!file){
+				ostringstream filename;
+				filename << outpath << '/' << setw(12) << setfill('0') << jobnumber << name << filesuffix;
+				cout << "Creating " << filename.str() << '\n';
+				file = new ofstream(filename.str().c_str());
+				if (!file || !file->is_open()){
+					cout << "Could not create" << filename.str() << '\n';
+					exit(-1);
+				}
+				*file <<	"jobnumber particle "
+	                		"tstart xstart ystart zstart "
+	                		"vxstart vystart vzstart "
+	                		"polstart Hstart Estart "
+	                		"tend xend yend zend "
+	                		"vxend vyend vzend "
+	                		"polend Hend Eend stopID Nspinflip spinflipprob "
+	                		"ComputingTime Nhit Nstep trajlength Hmax\n";
+				file->precision(10);
+			}
+			cout << "Printing status\n";
+			long double E = Ekin(&y[3]);
+			*file	<<	jobnumber << " " << particlenumber << " "
+					<<	tstart << " " << ystart[0] << " " << ystart[1] << " " << ystart[2] << " "
+					<<	ystart[3] << " " << ystart[4] << " " << ystart[5] << " "
+					<< polstart << " " << Hstart() << " " << Estart() << " "
+					<< x << " " << y[0] << " " << y[1] << " " << y[2] << " "
+					<< y[3] << " " << y[4] << " " << y[5] << " "
+					<< polarisation << " " << E + Epot(x, y, polarisation, field, currentsolids) << " " << E << " " << ID << " " << Nspinflip << " " << 1 - noflipprob << " "
+					<< inttime << " " << Nhit << " " << Nstep << " " << lend << " " << Hmax << '\n';
+		};
+
+
+		/**
+		 * Print current track point into stream to allow visualization of the particle's trajectory.
+		 *
+		 * This is a virtual function and can be overwritten by derived particle classes.
+		 *
+		 * @param trackfile Stream to print into
+		 * @param x Current time
+		 * @param y Current state vector
+		 * @param polarisation Current polarisation
+		 */
+		virtual void PrintTrack(ofstream *&trackfile, long double x, long double y[6], int polarisation){
+			if (!trackfile){
+				ostringstream filename;
+				filename << outpath << '/' << setw(12) << setfill('0') << jobnumber << name << "track.out";
+				cout << "Creating " << filename.str() << '\n';
+				trackfile = new ofstream(filename.str().c_str());
+				if (!trackfile || !trackfile->is_open()){
+					cout << "Could not create" << filename.str() << '\n';
+					exit(-1);
+				}
+				*trackfile << 	"jobnumber particle polarisation "
+								"t x y z vx vy vz "
+								"H E Bx dBxdx dBxdy dBxdz By dBydx "
+								"dBydy dBydz Bz dBzdx dBzdy dBzdz Babs dBdx dBdy dBdz Ex Ey Ez V\n";
+				trackfile->precision(10);
+			}
+
+			cout << "-";
+			long double B[4][4] = {{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}};
+			long double E[3] = {0,0,0};
+			long double V = 0;
+			if (field){
+				field->BField(y[0],y[1],y[2],x,B);
+				field->EField(y[0],y[1],y[2],x,V,E);
+			}
+			long double Ek = Ekin(&y[3]);
+			long double H = Ek + Epot(x, y, polarisation, field, currentsolids);
+
+			*trackfile << jobnumber << " " << particlenumber << " " << polarisation << " "
+						<< x << " " << y[0] << " " << y[1] << " " << y[2] << " " << y[3] << " " << y[4] << " " << y[5] << " "
+						<< H << " " << Ek << " ";
+			for (int i = 0; i < 4; i++)
+				for (int j = 0; j < 4; j++)
+					*trackfile << B[i][j] << " ";
+			*trackfile << E[0] << " " << E[1] << " " << E[2] << " " << V << '\n';
+		};
+
+
+		/**
+		 * Print material boundary hits into stream.
+		 *
+		 * This is a virtual function and can be overwritten by derived particle classes.
+		 *
+		 * @param hitfile stream to print into
+		 * @param x Time of material hit
+		 * @param y1 State vector before material hit
+		 * @param y2 State vector after material hit
+		 * @param pol1 Polarisation before material hit
+		 * @param pol2 Polarisation after material hit
+		 * @param normal Normal vector of hit surface
+		 * @param leaving Material which is left at this boundary
+		 * @param entering Material which is entered at this boundary
+		 */
+		virtual void PrintHit(ofstream *&hitfile, long double x, long double *y1, long double *y2, int pol1, int pol2, long double *normal, const solid *leaving, const solid *entering){
+			if (!hitfile){
+				ostringstream filename;
+				filename << outpath << '/' << setw(12) << setfill('0') << jobnumber << name << "hit.out";
+				cout << "Creating " << filename.str() << '\n';
+				hitfile = new ofstream(filename.str().c_str());
+				if (!hitfile || !hitfile->is_open()){
+					cout << "Could not create" << filename.str() << '\n';
+					exit(-1);
+				}
+				*hitfile << "jobnumber particle "
+							"t x y z v1x v1y v1z pol1 "
+							"v2x v2y v2z pol2 "
+							"nx ny nz solid1 solid2\n";
+				hitfile->precision(10);
+			}
+
+			cout << ":";
+			*hitfile << jobnumber << " " << particlenumber << " "
+					<< x << " " << y1[0] << " " << y1[1] << " " << y1[2] << " " << y1[3] << " " << y1[4] << " " << y1[5] << " " << pol1 << " "
+					<< y2[3] << " " << y2[4] << " " << y2[5] << " " << pol2 << " "
+					<< normal[0] << " " << normal[1] << " " << normal[2] << " " << leaving->ID << " " << entering->ID << '\n';
+		}
+
+
 		/**
 		 * Calculate kinetic energy.
 		 *
-		 * Kinetic energy is calculated by 0.5mv^2, if v/c < ::RELATIVSTIC_THRESHOLD, else it is calculated by (gamma-1)mc^2
+		 * Kinetic energy is calculated by series expansion of rel. gamma factor, if v/c < ::RELATIVSTIC_THRESHOLD, else it is calculated exactly by (gamma-1)mc^2
 		 *
 		 * @return Kinetic energy [eV]
 		 */
 		long double Ekin(const long double v[3]){
 			long double vend = sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
-			if (vend/c_0 < RELATIVISTIC_THRESHOLD)
-				return 0.5*m*vend*vend;
+			long double beta = vend/c_0;
+			if (beta < RELATIVISTIC_THRESHOLD) // use series expansion for energy calculation with small beta
+				return 0.5*m*vend*vend + (3/8*m + 5/16*m*beta*beta + 35/128*beta*beta*beta*beta)*vend*vend*beta*beta;
 			else{
-				long double gammarel = 1/sqrt(1 - vend*vend/(c_0*c_0));
+				long double gammarel = 1/sqrt(1 - beta*beta); // use relativistic formula for larger beta
 				return c_0*c_0*m*(gammarel - 1);
 			}
 		}
@@ -855,10 +882,11 @@ struct TParticle{
 		 * @param y Coordinate vector
 		 * @param polarisation Particle polarisation
 		 * @param field Pointer to TFieldManager structure for electric and magnetic potential
+		 * @param solids List of solids for optional material potential
 		 *
 		 * @return Returns potential energy [eV]
 		 */
-		virtual long double Epot(const long double t, const long double y[3], int polarisation, TFieldManager *field = NULL){
+		virtual long double Epot(const long double t, const long double y[3], int polarisation, TFieldManager *field, set<solid> &solids){
 			long double result = 0;
 			if ((q != 0 || mu != 0) && field){
 				long double B[4][4], E[3], V;

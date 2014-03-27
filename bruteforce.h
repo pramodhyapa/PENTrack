@@ -173,7 +173,6 @@ struct TBFIntegrator{
 					else
 						(*I_n)[2] = 0.5;
 					cout << "\nBF starttime " << x1 << " ";
-					fflush(stdout);
 				}
 
 				TBFderivs BFderivs(gamma, x1, y1, B1, x2, y2, B2); // create derivs-struct
@@ -222,10 +221,10 @@ struct TBFIntegrator{
 				BFoutfile1 << outpath << "/" << setw(12) << setfill('0') << jobnumber << setw(0) << particlename << "spin.out";
 				cout << "Creating " << BFoutfile1.str() << '\n';
 				spinout = new ofstream(BFoutfile1.str().c_str());
-				if(spinout->bad())
+				if(!spinout || !spinout->is_open())
 				{
 					cout << "Could not open " << BFoutfile1.str() << '\n';
-					exit(1);
+					exit(-1);
 				}
 				*spinout << "t Babs Polar logPolar Ix Iy Iz Bx By Bz\n";
 			}
