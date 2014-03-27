@@ -35,6 +35,7 @@ class TabField3: public TField{
 		long double RampUpTime; ///< field is ramped linearly from 0 to 100% in this time (passed by constructor)
 		long double FullFieldTime; ///< Time the field stays at 100% (passed by constructor)
 		long double RampDownTime; ///< field is ramped down linearly from 100% to 0 in this time (passed by constructor)
+		long double BoundaryLength;
 
 
 		/**
@@ -538,11 +539,12 @@ class TabField3: public TField{
 		 * @param aRampDownTime Set TabField3::RampDownTime
 		 */
 		TabField3(const char *tabfile, long double Bscale, long double Escale,
-				long double aNullFieldTime, long double aRampUpTime, long double aFullFieldTime, long double aRampDownTime){
+				long double aNullFieldTime, long double aRampUpTime, long double aFullFieldTime, long double aRampDownTime, long double aBoundaryLength){
 			NullFieldTime = aNullFieldTime;
 			RampUpTime = aRampUpTime;
 			FullFieldTime = aFullFieldTime;
 			RampDownTime = aRampDownTime;
+			BoundaryLength = aBoundaryLength;
 			Bxc = Byc = Bzc = Vc = NULL;
 
 			Mat3DDoub *BxTab = NULL, *ByTab = NULL, *BzTab = NULL;	// Bx/By/Bz values
@@ -599,33 +601,11 @@ class TabField3: public TField{
 		void BField(long double x, long double y, long double z, long double t, long double B[4][4]){
 			long double Bscale = BFieldScale(t);
 
-				
+						
 			//alternate variables for x,y,z for use in folding functions
 			long double xf = x; 
 			long double yf = y; 
 			long double zf = z; 
-
-			//the dimensions of the field
-			long double x1 = -0.12; 
-			long double x2 = 0.11; 
-			long double y1 = 2.000342; 
-			long double y2 = 6.000342;
-			long double z1 = -0.11; 
-			long double z2 = 0.11; 
-
-			//the boundary values for the 'positive' boundary
-			long double g = 0.06; //the start boundary value for x, z
-			long double h = 0.11; //the end boundary value for x, z
-			long double p = 5.950342; //the start boundary value for y
-			long double q = 6.000342; //the start boundary value for y
-
-			//the boundary values for the 'negative' boundary
-			long double g2 = -0.12; //the start boundary value for x, z
-			long double h2 = -0.06; //the end boundary value for x, z
-			long double p2 = 2.000342; //the start boundary value for y
-			long double q2 = 1.950342; //the start boundary value for y
-
-
 
 			int indx = floor((x - x_mi)/xdist);
 			int indy = floor((y - y_mi)/ydist);
@@ -656,46 +636,113 @@ class TabField3: public TField{
 					B[2][3] += Bscale*tricubic_eval((*Bzc)[indx][indy][indz], x, y, z, 0, 0, 1)/zdist;
 				}
 			}
+			
+			if (BoundaryLength > 0){
+				Bfolder(xf,yf,zf,B); }			
+						
+		};
+		
+		/**
+		 * Smooths out the B field at the boundaries.
+		 *
+		 * This function gets called in the BField function if the BoundaryLength, which is specfied in the FIELDS portion of the config file, is more than 0
+		 * The boundary edges are smoothed by multiplying the field in the boundary areas with a 5th degree polynomial called the Smootherstep function
+		 * The derivatives are also scaled by this function according to the product rule
+		 * @param xf X coordinate where the field shall be evaluated
+		 * @param yf Y coordinate where the field shall be evaluated
+		 * @param zf Z coordinate where the field shall be evaluated
+		 * @param B Returns magnetic field components B[0..2][0], their derivatives B[0..2][1..3], the absolute value B[3][0] and its derivatives B[3][1..3]
+		 */
 
-									
+		void Bfolder(long double xf, long double yf, long double zf, long double B[4][4]){
+			//the dimensions of the field
+			long double x1 = x_mi; 
+			long double x2 = x_mi + xdist*(xl-1); 
+			long double y1 = y_mi; 
+			long double y2 = y_mi + ydist*(yl-1);
+			long double z1 = z_mi; 
+			long double z2 = z_mi + zdist*(zl-1); 
+
+			//the boundary values for the 'positive' boundary
+			long double g = x2-BoundaryLength; //the start boundary value for x
+			long double h = x2; //the end boundary value for x
+			long double p = y2-BoundaryLength; //the start boundary value for y
+			long double q = y2; //the end boundary value for y
+			long double r = z2-BoundaryLength; //the start boundary value for z
+			long double s = z2; //the end boundary value for z
+
+			//WARNING: This assumes that the minimum y value is positive
+			//the boundary values for the 'negative' boundary
+			long double g2 = x_mi; //the start boundary value for x
+			long double h2 = x_mi+BoundaryLength; //the end boundary value for x
+			long double p2 = y_mi; //the start boundary value for y
+			long double q2 = y_mi+BoundaryLength; //the end boundary value for y
+			long double r2 = z_mi; //the start boundary value for z
+			long double s2 = z_mi+BoundaryLength; //the end boundary value for z
+
 			//folding in the 'positive' boundary of each axis
 			if ((xf >=g) && (xf<=h) && (yf>=y1) && (yf<=y2) && (zf>=z1) && (zf<=z2)) {
-				B[0][0]=B[0][0]*(1-(6*pow((xf-g)/(h-g),5)-15*pow((xf-g)/(h-g),4)+10*pow((xf-g)/(h-g),3)));
-				B[1][0]=B[1][0]*(1-(6*pow((xf-g)/(h-g),5)-15*pow((xf-g)/(h-g),4)+10*pow((xf-g)/(h-g),3)));
-				B[2][0]=B[2][0]*(1-(6*pow((xf-g)/(h-g),5)-15*pow((xf-g)/(h-g),4)+10*pow((xf-g)/(h-g),3)));
+				for (int i = 0;i <= 2; i++) {
+					B[i][0]=B[i][0]*(1-(SmthrStp(xf,g,h)));
+					for (int j = 1; j <= 3; j++) {
+						B[i][j] = B[i][j]*(1-(SmthrStp(xf,g,h))) + B[i][0]*(-1*SmthrStpDer(xf,g,h));					
+					} 
+				}
+				
 			} 
-			if (yf >p && yf<q && xf>x1 && xf<x2 && zf>z1 && zf<z2){
-				B[0][0]=B[0][0]*(1-(6*pow((yf-p)/(q-p),5)-15*pow((yf-p)/(q-p),4)+10*pow((yf-p)/(q-p),3)));
-				B[1][0]=B[1][0]*(1-(6*pow((yf-p)/(q-p),5)-15*pow((yf-p)/(q-p),4)+10*pow((yf-p)/(q-p),3)));
-				B[2][0]=B[2][0]*(1-(6*pow((yf-p)/(q-p),5)-15*pow((yf-p)/(q-p),4)+10*pow((yf-p)/(q-p),3)));
+			if (yf >=p && yf<=q && xf>=x1 && xf<=x2 && zf>=z1 && zf<=z2){
+				for (int i = 0;i <= 2; i++) {
+					B[i][0]=B[i][0]*(1-(SmthrStp(yf,p,q))); 
+					for (int j = 1; j <= 3; j++) {
+						B[i][j] = B[i][j]*(1-(SmthrStp(yf,p,q))) + B[i][0]*(-1*SmthrStpDer(yf,p,q));					
+					} 
+				}
 			}
 			
-			if (zf >=g && zf<=h && yf>=y1 && yf<=y2 && xf>=x1 && xf<=x2){
-				B[0][0]=B[0][0]*(1-(6*pow((zf-g)/(h-g),5)-15*pow((zf-g)/(h-g),4)+10*pow((zf-g)/(h-g),3)));
-				B[1][0]=B[1][0]*(1-(6*pow((zf-g)/(h-g),5)-15*pow((zf-g)/(h-g),4)+10*pow((zf-g)/(h-g),3)));
-				B[2][0]=B[2][0]*(1-(6*pow((zf-g)/(h-g),5)-15*pow((zf-g)/(h-g),4)+10*pow((zf-g)/(h-g),3)));
+			if (zf >=r && zf<=s && yf>=y1 && yf<=y2 && xf>=x1 && xf<=x2){
+				for (int i = 0;i <= 2; i++) {
+					B[i][0]=B[i][0]*(1-(SmthrStp(zf,r,s))); 
+					for (int j = 1; j <= 3; j++) {
+						B[i][j] = B[i][j]*(1-(SmthrStp(zf,r,s))) + B[i][0]*(-1*SmthrStpDer(zf,r,s));					
+					} 
+				}
 			} 
 			
 			
-			//REVAMPED folding in the 'negative' boundary of each axis
+			//folding in the 'negative' boundary of each axis
 			if (xf >=g2 && xf<=h2 && yf>=y1 && yf<=y2 && zf>=z1 && zf<=z2){
-				B[0][0]=B[0][0]*(6*pow((xf-g2)/(h2-g2),5)-15*pow((xf-g2)/(h2-g2),4)+10*pow((xf-g2)/(h2-g2),3));
-				B[1][0]=B[1][0]*(6*pow((xf-g2)/(h2-g2),5)-15*pow((xf-g2)/(h2-g2),4)+10*pow((xf-g2)/(h2-g2),3));
-				B[2][0]=B[2][0]*(6*pow((xf-g2)/(h2-g2),5)-15*pow((xf-g2)/(h2-g2),4)+10*pow((xf-g2)/(h2-g2),3));
+				for (int i = 0;i <= 2; i++) {
+					B[i][0]=B[i][0]*SmthrStp(xf,g2,h2); 
+					for (int j = 1; j <= 3; j++) {
+						B[i][j] = B[i][j]*SmthrStp(xf,g2,h2) + B[i][0]*SmthrStpDer(xf,g2,h2);					
+					} 
+				}
 			}
 			if (yf >=p2 && yf<=q2 && xf>=x1 && xf<=x2 && zf>=z1 && zf<=z2){
-				B[0][0]=B[0][0]*(6*pow((yf-p2)/(q2-p2),5)-15*pow((yf-p2)/(q2-p2),4)+10*pow((yf-p2)/(q2-p2),3));
-				B[1][0]=B[1][0]*(6*pow((yf-p2)/(q2-p2),5)-15*pow((yf-p2)/(q2-p2),4)+10*pow((yf-p2)/(q2-p2),3));
-				B[2][0]=B[2][0]*(6*pow((yf-p2)/(q2-p2),5)-15*pow((yf-p2)/(q2-p2),4)+10*pow((yf-p2)/(q2-p2),3));
+				for (int i = 0;i <= 2; i++) {
+					B[i][0]=B[i][0]*SmthrStp(yf,p2,q2);
+					for (int j = 1; j <= 3; j++) {
+						B[i][j] = B[i][j]*SmthrStp(yf,p2,q2) + B[i][0]*SmthrStpDer(yf,p2,q2);					
+					} 
+				}
 			}
 			
-			if (zf >=g2 && zf<=h2 && yf>=y1 && yf<=y2 && xf>=x1 && xf<=x2){
-				B[0][0]=B[0][0]*(6*pow((zf-g2)/(h2-g2),5)-15*pow((zf-g2)/(h2-g2),4)+10*pow((zf-g2)/(h2-g2),3));
-				B[1][0]=B[1][0]*(6*pow((zf-g2)/(h2-g2),5)-15*pow((zf-g2)/(h2-g2),4)+10*pow((zf-g2)/(h2-g2),3));
-				B[2][0]=B[2][0]*(6*pow((zf-g2)/(h2-g2),5)-15*pow((zf-g2)/(h2-g2),4)+10*pow((zf-g2)/(h2-g2),3));
+			if (zf >=r2 && zf<=s2 && yf>=y1 && yf<=y2 && xf>=x1 && xf<=x2){
+				for (int i = 0;i <= 2; i++) {
+					B[i][0]=B[i][0]*SmthrStp(zf,r2,s2);
+					for (int j = 1; j <= 3; j++) {
+						B[i][j] = B[i][j]*SmthrStp(zf,r2,s2) + B[i][0]*SmthrStpDer(zf,r2,s2);					
+					} 
+				}
 			}  
+		};
 
+		long double SmthrStp(long double a, long double b, long double c) {
+			return (6*pow((a-b)/(c-b),5)-15*pow((a-b)/(c-b),4)+10*pow((a-b)/(c-b),3));
+		};
 			
+		long double SmthrStpDer(long double a, long double b, long double c) {
+			return (30*pow((a-b)/(c-b),4)-60*pow((a-b)/(c-b),3)+30*pow((a-b)/(c-b),2));
 		};
 
 		/**

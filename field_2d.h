@@ -49,6 +49,7 @@ class TabField: public TField{
 		long double RampUpTime; ///< field is ramped linearly from 0 to 100% in this time (passed by constructor)
 		long double FullFieldTime; ///< Time the field stays at 100% (passed by constructor)
 		long double RampDownTime; ///< field is ramped down linearly from 100% to 0 in this time (passed by constructor)
+		long double BoundaryLength;
 
 
 		/**
@@ -388,11 +389,12 @@ class TabField: public TField{
 		 * @param aRampDownTime Set TabField::RampDownTime
 		 */
 		TabField(const char *tabfile, long double Bscale, long double Escale,
-				long double aNullFieldTime, long double aRampUpTime, long double aFullFieldTime, long double aRampDownTime){
+				long double aNullFieldTime, long double aRampUpTime, long double aFullFieldTime, long double aRampDownTime, long double aBoundaryLength){
 			NullFieldTime = aNullFieldTime;
 			RampUpTime = aRampUpTime;
 			FullFieldTime = aFullFieldTime;
 			RampDownTime = aRampDownTime;
+			BoundaryLength = aBoundaryLength;
 
 			MatDoub BrTab, BphiTab, BzTab;	// Br/Bz values
 			MatDoub ErTab , EphiTab, EzTab;	// Er/Ez values
@@ -489,8 +491,102 @@ class TabField: public TField{
 				B[2][1] += dBzdr*cos(phi)*Bscale;
 				B[2][2] += dBzdr*sin(phi)*Bscale;
 				B[2][3] += dBzdz*Bscale;
-				printf("What is THIS SHIT???");
+
+			if (BoundaryLength > 0){
+				Bfolder2D(x,y,z,B); }
+				
 			}
+		};
+
+		void Bfolder2D(long double x, long double y, long double z, long double B[4][4]){
+			//the dimensions of the field
+			long double x1 = r_mi; 
+			long double x2 = r_mi + rdist*(m-1); 
+			long double y1 = r_mi; 
+			long double y2 = r_mi + rdist*(m-1);
+			long double z1 = z_mi; 
+			long double z2 = z_mi + zdist*(n-1); 
+
+			//the boundary values for the 'positive' boundary
+			long double g = x2-BoundaryLength; //the start boundary value for x
+			long double h = x2; //the end boundary value for x
+			long double p = y2-BoundaryLength; //the start boundary value for y
+			long double q = y2; //the end boundary value for y
+			long double u = z2-BoundaryLength; //the start boundary value for z
+			long double s = z2; //the end boundary value for z
+
+			//WARNING: This assumes that the minimum y value is positive
+			//the boundary values for the 'negative' boundary
+			long double g2 = r_mi; //the start boundary value for x
+			long double h2 = r_mi+BoundaryLength; //the end boundary value for x
+			long double p2 = r_mi; //the start boundary value for y
+			long double q2 = r_mi+BoundaryLength; //the end boundary value for y
+			long double r2 = z_mi; //the start boundary value for z
+			long double s2 = z_mi+BoundaryLength; //the end boundary value for z
+
+			//folding in the 'positive' boundary of each axis
+			if ((x >=g) && (x<=h) && (y>=y1) && (y<=y2) && (z>=z1) && (z<=z2)) {
+				for (int i = 0;i <= 2; i++) {
+					B[i][0]=B[i][0]*(1-(SmthrStp2D(x,g,h)));
+					for (int j = 1; j <= 3; j++) {
+						B[i][j] = B[i][j]*(1-(SmthrStp2D(x,g,h))) + B[i][0]*(-1*SmthrStpDer2D(x,g,h));					
+					} 
+				}
+				
+			} 
+			if (y >=p && y<=q && x>=x1 && x<=x2 && z>=z1 && z<=z2){
+				for (int i = 0;i <= 2; i++) {
+					B[i][0]=B[i][0]*(1-(SmthrStp2D(y,p,q))); 
+					for (int j = 1; j <= 3; j++) {
+						B[i][j] = B[i][j]*(1-(SmthrStp2D(y,p,q))) + B[i][0]*(-1*SmthrStpDer2D(y,p,q));					
+					} 
+				}
+			}
+			
+			if (z >=u && z<=s && y>=y1 && y<=y2 && x>=x1 && x<=x2){
+				for (int i = 0;i <= 2; i++) {
+					B[i][0]=B[i][0]*(1-(SmthrStp2D(z,u,s))); 
+					for (int j = 1; j <= 3; j++) {
+						B[i][j] = B[i][j]*(1-(SmthrStp2D(z,u,s))) + B[i][0]*(-1*SmthrStpDer2D(z,u,s));					
+					} 
+				}
+			} 
+			
+			
+			//folding in the 'negative' boundary of each axis
+			if (x >=g2 && x<=h2 && y>=y1 && y<=y2 && z>=z1 && z<=z2){
+				for (int i = 0;i <= 2; i++) {
+					B[i][0]=B[i][0]*SmthrStp2D(x,g2,h2); 
+					for (int j = 1; j <= 3; j++) {
+						B[i][j] = B[i][j]*SmthrStp2D(x,g2,h2) + B[i][0]*SmthrStpDer2D(x,g2,h2);					
+					} 
+				}
+			}
+			if (y >=p2 && y<=q2 && x>=x1 && x<=x2 && z>=z1 && z<=z2){
+				for (int i = 0;i <= 2; i++) {
+					B[i][0]=B[i][0]*SmthrStp2D(y,p2,q2);
+					for (int j = 1; j <= 3; j++) {
+						B[i][j] = B[i][j]*SmthrStp2D(y,p2,q2) + B[i][0]*SmthrStpDer2D(y,p2,q2);					
+					} 
+				}
+			}
+			
+			if (z >=r2 && z<=s2 && y>=y1 && y<=y2 && x>=x1 && x<=x2){
+				for (int i = 0;i <= 2; i++) {
+					B[i][0]=B[i][0]*SmthrStp2D(z,r2,s2);
+					for (int j = 1; j <= 3; j++) {
+						B[i][j] = B[i][j]*SmthrStp2D(z,r2,s2) + B[i][0]*SmthrStpDer2D(z,r2,s2);					
+					} 
+				}
+			}  
+		};
+
+		long double SmthrStp2D(long double a, long double b, long double c) {
+			return (6*pow((a-b)/(c-b),5)-15*pow((a-b)/(c-b),4)+10*pow((a-b)/(c-b),3));
+		};
+			
+		long double SmthrStpDer2D(long double a, long double b, long double c) {
+			return (30*pow((a-b)/(c-b),4)-60*pow((a-b)/(c-b),3)+30*pow((a-b)/(c-b),2));
 		};
 
 

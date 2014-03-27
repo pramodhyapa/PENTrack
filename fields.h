@@ -36,20 +36,20 @@ struct TFieldManager{
 			for (map<string, string>::iterator i = conf["FIELDS"].begin(); i != conf["FIELDS"].end(); i++){
 				string type;
 				string ft;
-				long double Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime;
+				long double Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime, BoundaryLength;
 				long double Ibar, p1, p2, p3, p4, p5, p6;
 				TField *f = NULL;
 				istringstream ss(i->second);
 
 				if (i->first == "2Dtable"){
-					ss >> ft >> Bscale >> Escale >> NullFieldTime >> RampUpTime >> FullFieldTime >> RampDownTime;
+					ss >> ft >> Bscale >> Escale >> NullFieldTime >> RampUpTime >> FullFieldTime >> RampDownTime >> BoundaryLength;
 					if (ss)
-						f = new TabField(ft.c_str(), Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime);
+						f = new TabField(ft.c_str(), Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime, BoundaryLength);
 				}
 				else if (i->first == "3Dtable"){
-					ss >> ft >> Bscale >> Escale >> NullFieldTime >> RampUpTime >> FullFieldTime >> RampDownTime;
+					ss >> ft >> Bscale >> Escale >> NullFieldTime >> RampUpTime >> FullFieldTime >> RampDownTime >> BoundaryLength;
 					if (ss)
-						f = new TabField3(ft.c_str(), Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime);
+						f = new TabField3(ft.c_str(), Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime, BoundaryLength);
 				}
 				else if (i->first == "InfiniteWireZ"){
 					ss >> Ibar >> p1 >> p2;
@@ -149,7 +149,11 @@ struct TFieldManager{
 					B[3][3] = (B[0][0]*B[0][3] + B[1][0]*B[1][3] + B[2][0]*B[2][3])/B[3][0];
 				}
 			}
+
 		};
+
+
+
 		
 		/**
 		 * Calculate electric field and potential at a given position.
@@ -187,21 +191,20 @@ struct TFieldManager{
 				else if (!infile.good() || c == '[') break;	// next section found
 				string type;
 				string ft;
-				long double Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime;
+				long double Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime, BoundaryLength;
 				long double Ibar, p1, p2, p3, p4, p5, p6;
 				TConductorField *cf = NULL;
 				infile >> type;
 				if (type == "2Dtable"){
-					infile >> ft >> Bscale >> Escale >> NullFieldTime >> RampUpTime >> FullFieldTime >> RampDownTime;
+					infile >> ft >> Bscale >> Escale >> NullFieldTime >> RampUpTime >> FullFieldTime >> RampDownTime >> BoundaryLength;
 					TabField *tf;
-					tf = new TabField(ft.c_str(), Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime);
+					tf = new TabField(ft.c_str(), Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime, BoundaryLength);
 					fields.push_back(tf);
 				}
 				else if (type == "3Dtable"){
-					printf("3D TABLE WHAT WHAT!");
-					infile >> ft >> Bscale >> Escale >> NullFieldTime >> RampUpTime >> FullFieldTime >> RampDownTime;
+					infile >> ft >> Bscale >> Escale >> NullFieldTime >> RampUpTime >> FullFieldTime >> RampDownTime >> BoundaryLength;
 					TabField3 *tf;
-					tf = new TabField3(ft.c_str(), Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime);
+					tf = new TabField3(ft.c_str(), Bscale, Escale, NullFieldTime, RampUpTime, FullFieldTime, RampDownTime, BoundaryLength);
 					fields.push_back(tf);
 				}
 				else if (type == "InfiniteWireZ"){
