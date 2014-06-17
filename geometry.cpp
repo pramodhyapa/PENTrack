@@ -13,9 +13,11 @@ TGeometry::TGeometry(TConfig &geometryin){
 		material mat;
 		mat.name = i->first;
 		istringstream ss(i->second);
-
+<<<<<<< HEAD
+		ss >> mat.FermiReal >> mat.FermiImag >> mat.DiffProb >> mat.SpinflipProb >> mat.RMSRough >> mat.CorrelLength;
+=======
 		ss >> mat.FermiReal >> mat.FermiImag >> mat.DiffProb >> mat.SpinflipProb;
-
+>>>>>>> 576917071fe1fa6a189b677dc23b8c91c9746e9d
 		if (ss)
 			materials.push_back(mat);
 		else
