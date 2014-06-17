@@ -683,28 +683,22 @@ class TabField3: public TField{
 			//folding in the 'positive' boundary of each axis
 			if ((xf >=g) && (xf<=h) && (yf>=y1) && (yf<=y2) && (zf>=z1) && (zf<=z2)) {
 				for (int i = 0;i <= 2; i++) {
+					for (int j = 1; j <= 3; j++) {	B[i][j] = B[i][j]*(1-(SmthrStp(xf,g,h))) + B[i][0]*(-1*SmthrStpDer(xf,g,h)); }
 					B[i][0]=B[i][0]*(1-(SmthrStp(xf,g,h)));
-					for (int j = 1; j <= 3; j++) {
-						B[i][j] = B[i][j]*(1-(SmthrStp(xf,g,h))) + B[i][0]*(-1*SmthrStpDer(xf,g,h));					
-					} 
 				}
 				
 			} 
 			if (yf >=p && yf<=q && xf>=x1 && xf<=x2 && zf>=z1 && zf<=z2){
 				for (int i = 0;i <= 2; i++) {
+					for (int j = 1; j <= 3; j++) {	B[i][j] = B[i][j]*(1-(SmthrStp(yf,p,q))) + B[i][0]*(-1*SmthrStpDer(yf,p,q));	}
 					B[i][0]=B[i][0]*(1-(SmthrStp(yf,p,q))); 
-					for (int j = 1; j <= 3; j++) {
-						B[i][j] = B[i][j]*(1-(SmthrStp(yf,p,q))) + B[i][0]*(-1*SmthrStpDer(yf,p,q));					
-					} 
 				}
 			}
 			
 			if (zf >=r && zf<=s && yf>=y1 && yf<=y2 && xf>=x1 && xf<=x2){
 				for (int i = 0;i <= 2; i++) {
+					for (int j = 1; j <= 3; j++) {	B[i][j] = B[i][j]*(1-(SmthrStp(zf,r,s))) + B[i][0]*(-1*SmthrStpDer(zf,r,s));	}
 					B[i][0]=B[i][0]*(1-(SmthrStp(zf,r,s))); 
-					for (int j = 1; j <= 3; j++) {
-						B[i][j] = B[i][j]*(1-(SmthrStp(zf,r,s))) + B[i][0]*(-1*SmthrStpDer(zf,r,s));					
-					} 
 				}
 			} 
 			
@@ -712,27 +706,21 @@ class TabField3: public TField{
 			//folding in the 'negative' boundary of each axis
 			if (xf >=g2 && xf<=h2 && yf>=y1 && yf<=y2 && zf>=z1 && zf<=z2){
 				for (int i = 0;i <= 2; i++) {
+					for (int j = 1; j <= 3; j++) {	B[i][j] = B[i][j]*SmthrStp(xf,g2,h2) + B[i][0]*SmthrStpDer(xf,g2,h2);	}
 					B[i][0]=B[i][0]*SmthrStp(xf,g2,h2); 
-					for (int j = 1; j <= 3; j++) {
-						B[i][j] = B[i][j]*SmthrStp(xf,g2,h2) + B[i][0]*SmthrStpDer(xf,g2,h2);					
-					} 
 				}
 			}
 			if (yf >=p2 && yf<=q2 && xf>=x1 && xf<=x2 && zf>=z1 && zf<=z2){
 				for (int i = 0;i <= 2; i++) {
+					for (int j = 1; j <= 3; j++) {	B[i][j] = B[i][j]*SmthrStp(yf,p2,q2) + B[i][0]*SmthrStpDer(yf,p2,q2);	}
 					B[i][0]=B[i][0]*SmthrStp(yf,p2,q2);
-					for (int j = 1; j <= 3; j++) {
-						B[i][j] = B[i][j]*SmthrStp(yf,p2,q2) + B[i][0]*SmthrStpDer(yf,p2,q2);					
-					} 
 				}
 			}
 			
 			if (zf >=r2 && zf<=s2 && yf>=y1 && yf<=y2 && xf>=x1 && xf<=x2){
 				for (int i = 0;i <= 2; i++) {
+					for (int j = 1; j <= 3; j++) {	B[i][j] = B[i][j]*SmthrStp(zf,r2,s2) + B[i][0]*SmthrStpDer(zf,r2,s2);	}
 					B[i][0]=B[i][0]*SmthrStp(zf,r2,s2);
-					for (int j = 1; j <= 3; j++) {
-						B[i][j] = B[i][j]*SmthrStp(zf,r2,s2) + B[i][0]*SmthrStpDer(zf,r2,s2);					
-					} 
 				}
 			}  
 		};
