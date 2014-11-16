@@ -490,9 +490,11 @@ protected:
 		if (vnormal < 0) theta_r += pi; // if normal points into volume rotate by 180 degrees
 		x2 = x1;
 		for (int i = 0; i < 6; i++)					y2[i] = y1[i];
-		y2[3] = vabs*cos(phi_r)*sin(theta_r);	// new velocity with respect to z-axis
-		y2[4] = vabs*sin(phi_r)*sin(theta_r);
-		y2[5] = vabs*cos(theta_r);
+		long double k1 = sqrt(Enormal); // wavenumber in first solid 
+		long double k2 = sqrt(Enormal - Estep); // wavenumber in second solid
+		y2[3] = (k2/k1 - 1)*vabs*cos(phi_r)*sin(theta_r);	// new velocity with respect to z-axis, with scaling factor (k2/k1 -1)
+		y2[4] = (k2/k1 - 1)*vabs*sin(phi_r)*sin(theta_r);
+		y2[5] = (k2/k1 - 1)*vabs*cos(theta_r);
 		RotateVector(&y2[3],normal); // rotate coordinate system so that new z-axis lies on normal
 //		printf("Diffuse transmission! Erefl=%LG neV w_e=%LG w_s=%LG\n",Enormal*1e9,phi_r/conv,theta_r/conv);
 	}
@@ -515,8 +517,6 @@ protected:
 				for (int i = 0; i < 6; i++)
 				y2[i] = y1[i];
 				MicroRoughnessRotateVector(&y2[3], normal, theta_o_test-theta_i, pi+phi_o_test);	
-				//for (int i = 3; i < 6; i++) //This is to account for the fact that the
-				//	y2[i] = -y1[i];
 				found = true;
 				//cout << "This is the normal = (" << normal[0] << ", " << normal[1] << ", " << normal[2] << ")" << '\n';
 				//cout << "This is the initial velocity vector = (" << y1[3] << ", " << y1[4] << ", " << y1[5] << ")" << '\n';
@@ -545,8 +545,11 @@ protected:
 				x2 = x1;
 				for (int i = 0; i < 3; i++)
 				y2[i] = y1[i];
-				//for (int i = 3; i < 6; i++) //This is to account for the fact that the
-				//y2[i] = -y1[i];
+				for (int i = 3; i < 6; i++) {//This is to scale the velocity according to the material it is travelling through
+					long double k1 = sqrt(Enormal); // wavenumber in first solid (use only real part for transmission!)
+					long double k2 = sqrt(Enormal - Estep); // wavenumber in second solid (use only real part for
+					y2[i] = (k2/k1 - 1)*y2[i];
+				}	
 				MicroRoughnessRotateVector(&y2[3], normal,pi-theta_o_test-theta_i, pi+phi_o_test);
 				found = true;
 				cout << "This neutron has been transmitted according to the MR Model!" << '\n';
