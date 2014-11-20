@@ -137,21 +137,17 @@ protected:
 				switch (Interaction) { //This switch changes to the appropriate model depending on what the int Interaction is
  					case 0: { //Specular case
 						//************** Snell's Law Transmission **************
-						long double k1 = sqrt(Enormal); // wavenumber in first solid (use only real part for transmission!)
-						long double k2 = sqrt(Enormal - Estep); // wavenumber in second solid (use only real part for transmission!)
-						DoSnellTransmission(y1, y2, normal, k1, k2);
+						DoSnellTransmission(y1, y2, normal, Estep);
 					}
 					break;
   					case 1: { //Specular-diffuse case
 						if (prob >= entering->mat.DiffProb){
 							//************** Snell's Law Transmission **************
-							long double k1 = sqrt(Enormal); // wavenumber in first solid (use only real part for transmission!)
-							long double k2 = sqrt(Enormal - Estep); // wavenumber in second solid (use only real part for transmission!)
-							DoSnellTransmission(y1, y2, normal, k1, k2);
+							DoSnellTransmission(y1, y2, normal, Estep);
 						}
 						else{
 							//************** Diffuse transmission ************
-							DoDiffuseTransmission(x1, y1, x2, y2, normal);
+							DoDiffuseTransmission(x1, y1, x2, y2, normal, Estep);
 						}
 					}
 					break;
@@ -172,22 +168,18 @@ protected:
 					
 							else { 
 								//************** Snell's Law Transmission **************
-								long double k1 = sqrt(Enormal); // wavenumber in first solid (use only real part for transmission!)
-								long double k2 = sqrt(Enormal - Estep); // wavenumber in second solid (use only real part for transmission!)
-								DoSnellTransmission(y1, y2, normal, k1, k2);
+								DoSnellTransmission(y1, y2, normal, Estep);
 							}
 	
 						}
 						else { //If the MR transmission condition is not valid, switch to Diffuse-specular
 							if (prob >= entering->mat.DiffProb){
 								//************** Snell's Law Transmission **************
-								long double k1 = sqrt(Enormal); // wavenumber in first solid (use only real part for transmission!)
-								long double k2 = sqrt(Enormal - Estep); // wavenumber in second solid (use only real part for transmission!)
-								DoSnellTransmission(y1, y2, normal, k1, k2);
+								DoSnellTransmission(y1, y2, normal, Estep);
 							}
 							else{
 								//************** Diffuse transmission ************
-								DoDiffuseTransmission(x1, y1, x2, y2, normal);
+								DoDiffuseTransmission(x1, y1, x2, y2, normal, Estep);
 							}
 						}
 					}
@@ -433,8 +425,11 @@ protected:
 	
 	} 
 
-	void DoSnellTransmission(long double y1[6], long double y2[6], const long double normal[3], long double k1, long double k2) {
+	void DoSnellTransmission(long double y1[6], long double y2[6], const long double normal[3], long double Estep) {
 		long double vnormal = y1[3]*normal[0] + y1[4]*normal[1] + y1[5]*normal[2];
+		long double Enormal = 0.5*m_n*vnormal*vnormal; // energy normal to reflection plane
+		long double k1 = sqrt(Enormal); // wavenumber in first solid 
+		long double k2 = sqrt(Enormal - Estep); // wavenumber in second solid
 		for (int i = 0; i < 3; i++)
 			y2[i + 3] += (k2/k1 - 1)*(normal[i]*vnormal); // refract (scale normal velocity by k2/k1)
 	}
@@ -474,9 +469,10 @@ protected:
 
 	}
 
-	void DoDiffuseTransmission(long double x1, long double y1[6], long double &x2, long double y2[6], const long double normal[3]) {
+	void DoDiffuseTransmission(long double x1, long double y1[6], long double &x2, long double y2[6], const long double normal[3], long double Estep) {
 		//THIS FUNCTION NEEDS TO BE TESTED
-		long double vnormal = y1[3]*normal[0] + y1[4]*normal[1] + y1[5]*normal[2];		
+		long double vnormal = y1[3]*normal[0] + y1[4]*normal[1] + y1[5]*normal[2];	
+		long double Enormal = 0.5*m_n*vnormal*vnormal; // energy normal to reflection plane	
 		long double vabs = sqrt(y1[3]*y1[3] + y1[4]*y1[4] + y1[5]*y1[5]);
 		long double phi_r = mc->UniformDist(0, 2*pi); // generate random reflection angles (Lambert's law)
 		long double theta_r = mc->SinCosDist(0, 0.5*pi);
@@ -526,6 +522,8 @@ protected:
 		bool found = false;
 		long double E = Ekin(&y1[3]); //Kinetic Energy of Neutron
 		long double theta_i = IncidentTheta(y1,normal);
+		long double vnormal = y1[3]*normal[0] + y1[4]*normal[1] + y1[5]*normal[2];	
+		long double Enormal = 0.5*m_n*vnormal*vnormal; // energy normal to reflection plane	
 		while (found == false) {
 			long double phi_o_test = mc->UniformDist(-1*pi,pi); //this is the potential outgoing phi value for the transmitted neutron
 			long double theta_o_test = mc->UniformDist(0,0.5*pi); //this is the potential outgoing theta value for the transmitted neutron
